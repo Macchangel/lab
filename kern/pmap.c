@@ -174,6 +174,7 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -358,11 +359,31 @@ page_decref(struct PageInfo* pp)
 // Hint 3: look at inc/mmu.h for useful macros that manipulate page
 // table and page directory entries.
 //
-pte_t *
-pgdir_walk(pde_t *pgdir, const void *va, int create)
+pte_t * pgdir_walk(pde_t *pgdir, const void * va, int create)
 {
-	// Fill this function in
-	return NULL;
+      unsigned int page_off;
+      pte_t * page_base = NULL;
+      struct PageInfo* new_page = NULL;
+      
+      unsigned int dic_off = PDX(va);
+      pde_t * dic_entry_ptr = pgdir + dic_off;
+
+      if(!(*dic_entry_ptr & PTE_P))
+      {
+            if(create)
+            {
+                   new_page = page_alloc(1);
+                   if(new_page == NULL) return NULL;
+                   new_page->pp_ref++;
+                   *dic_entry_ptr = (page2pa(new_page) | PTE_P | PTE_W | PTE_U);
+            }
+           else
+               return NULL;      
+      }  
+   
+      page_off = PTX(va);
+      page_base = KADDR(PTE_ADDR(*dic_entry_ptr));
+      return &page_base[page_off];
 }
 
 //
@@ -379,7 +400,18 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
-	// Fill this function in
+    int nadd;
+    pte_t *entry = NULL;
+    for(nadd = 0; nadd < size; nadd += PGSIZE)
+    {
+        entry = pgdir_walk(pgdir,(void *)va, 1);    //Get the table entry of this page.
+        *entry = (pa | perm | PTE_P);
+        
+        
+        pa += PGSIZE;
+        va += PGSIZE;
+        
+    }
 }
 
 //
@@ -410,10 +442,21 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
-	// Fill this function in
-	return 0;
-}
+    pte_t *entry = NULL;
+    entry =  pgdir_walk(pgdir, va, 1);    //Get the mapping page of this address va.
+    if(entry == NULL) return -E_NO_MEM;
 
+    pp->pp_ref++;
+    if((*entry) & PTE_P)             //If this virtual address is already mapped.
+    {
+        tlb_invalidate(pgdir, va);
+        page_remove(pgdir, va);
+    }
+    *entry = (page2pa(pp) | perm | PTE_P);
+    pgdir[PDX(va)] |= perm;                  //Remember this step!
+        
+    return 0;
+}
 //
 // Return the page mapped at virtual address 'va'.
 // If pte_store is not zero, then we store in it the address
