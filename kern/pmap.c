@@ -100,10 +100,11 @@ boot_alloc(uint32_t n)
 	// Allocate a chunk large enough to hold 'n' bytes, then update
 	// nextfree.  Make sure nextfree is kept aligned
 	// to a multiple of PGSIZE.
-	//
-	// LAB 2: Your code here.
-
-	return NULL;
+	result = nextfree；
+	nextfree = ROUNDUP(nextfree+n, PGSIZE);
+	if((uint32_t)nextfree - KERNBASE > (npages*PGSIZE))
+		panic("Out of memory!\n");
+	return result;
 }
 
 // Set up a two-level page table:
@@ -147,7 +148,8 @@ mem_init(void)
 	// each physical page, there is a corresponding struct PageInfo in this
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
-	// Your code goes here:
+	pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
+	memset(pages, 0, npages * sizeof(struct PageInfo));
 
 
 	//////////////////////////////////////////////////////////////////////
@@ -234,8 +236,6 @@ mem_init(void)
 void
 page_init(void)
 {
-	// The example code here marks all physical pages as free.
-	// However this is not truly the case.  What memory is free?
 	//  1) Mark physical page 0 as in use.
 	//     This way we preserve the real-mode IDT and BIOS structures
 	//     in case we ever need them.  (Currently we don't, but...)
@@ -248,14 +248,30 @@ page_init(void)
 	//     in physical memory?  Which pages are already in use for
 	//     page tables and other data structures?
 	//
-	// Change the code to reflect this.
-	// NB: DO NOT actually touch the physical memory corresponding to
-	// free pages!
 	size_t i;
-	for (i = 0; i < npages; i++) {
-		pages[i].pp_ref = 0;
-		pages[i].pp_link = page_free_list;
-		page_free_list = &pages[i];
+	page_free_list = NULL;
+
+	//num_alloc：在extmem区域已经被占用的页的个数
+	int num_alloc = ((uint32_t)boot_alloc(0) - KERNBASE) / PGSIZE;
+	//num_iohole：在io hole区域占用的页数
+	int num_iohole = 96;
+
+	for(i=0; i<npages; i++)
+	{
+	    if(i==0)
+	    {
+	        pages[i].pp_ref = 1;
+	    }    
+	    else if(i >= npages_basemem && i < npages_basemem + num_iohole + num_alloc)
+	    {
+	        pages[i].pp_ref = 1;
+	    }
+	    else
+	    {
+	        pages[i].pp_ref = 0;
+	        pages[i].pp_link = page_free_list;
+	        page_free_list = &pages[i];
+	    }
 	}
 }
 
@@ -274,20 +290,39 @@ page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
-	// Fill this function in
-	return 0;
+    struct PageInfo *result;
+    if (page_free_list == NULL)
+        return NULL;
+
+      result= page_free_list;
+      page_free_list = result->pp_link;
+      result->pp_link = NULL;
+
+    if (alloc_flags & ALLOC_ZERO)
+        memset(page2kva(result), 0, PGSIZE); 
+
+      return result;
 }
 
 //
 // Return a page to the free list.
 // (This function should only be called when pp->pp_ref reaches 0.)
 //
-void
-page_free(struct PageInfo *pp)
+struct PageInfo *
+page_alloc(int alloc_flags)
 {
-	// Fill this function in
-	// Hint: You may want to panic if pp->pp_ref is nonzero or
-	// pp->pp_link is not NULL.
+    struct PageInfo *result;
+    if (page_free_list == NULL)
+        return NULL;
+
+      result= page_free_list;
+      page_free_list = result->pp_link;
+      result->pp_link = NULL;
+
+    if (alloc_flags & ALLOC_ZERO)
+        memset(page2kva(result), 0, PGSIZE); 
+
+      return result;
 }
 
 //
