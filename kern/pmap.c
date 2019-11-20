@@ -309,21 +309,17 @@ page_alloc(int alloc_flags)
 // Return a page to the free list.
 // (This function should only be called when pp->pp_ref reaches 0.)
 //
-struct PageInfo *
-page_alloc(int alloc_flags)
+void
+page_free(struct PageInfo *pp)
 {
-    struct PageInfo *result;
-    if (page_free_list == NULL)
-        return NULL;
+    // Fill this function in
+    // Hint: You may want to panic if pp->pp_ref is nonzero or
+    // pp->pp_link is not NULL.
+      assert(pp->pp_ref == 0);
+      assert(pp->pp_link == NULL);
 
-      result= page_free_list;
-      page_free_list = result->pp_link;
-      result->pp_link = NULL;
-
-    if (alloc_flags & ALLOC_ZERO)
-        memset(page2kva(result), 0, PGSIZE); 
-
-      return result;
+      pp->pp_link = page_free_list;
+      page_free_list = pp;
 }
 
 //
