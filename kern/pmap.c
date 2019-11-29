@@ -100,7 +100,7 @@ boot_alloc(uint32_t n)
 	// Allocate a chunk large enough to hold 'n' bytes, then update
 	// nextfree.  Make sure nextfree is kept aligned
 	// to a multiple of PGSIZE.
-	result = nextfree；
+	result = nextfree;
 	nextfree = ROUNDUP(nextfree+n, PGSIZE);
 	if((uint32_t)nextfree - KERNBASE > (npages*PGSIZE))
 		panic("Out of memory!\n");
